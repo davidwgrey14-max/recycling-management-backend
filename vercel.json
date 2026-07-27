@@ -2,6 +2,30 @@
   "version": 2,
   "routes": [
     {
+      "src": "/api/auth/login",
+      "methods": ["OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://recycling-management-frontend-ow9o.vercel.app",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400"
+      },
+      "status": 204
+    },
+    {
+      "src": "/api/(.*)",
+      "methods": ["OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://recycling-management-frontend-ow9o.vercel.app",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Max-Age": "86400"
+      },
+      "status": 204
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/$1",
       "headers": {
