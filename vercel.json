@@ -1,20 +1,19 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
   "routes": [
     {
-      "src": "/(.*)",
-      "dest": "server.js",
+      "src": "/api/(.*)",
+      "dest": "/api/$1",
       "headers": {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": "https://recycling-management-frontend-ow9o.vercel.app",
+        "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, Authorization"
       }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/"
     }
   ]
 }
