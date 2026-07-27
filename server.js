@@ -5,8 +5,18 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+// 🔍 DEBUG: Check if server.js is loading
+console.log('✅ Server.js loaded successfully!');
+console.log('✅ Environment variables loaded:', {
+  PORT: process.env.PORT,
+  MONGODB_URI: process.env.MONGODB_URI ? 'Present' : 'Missing',
+  JWT_SECRET: process.env.JWT_SECRET ? 'Present' : 'Missing'
+});
+
 const authRoutes = require('./routes/auth');
 const mainRoutes = require('./routes/main');
+
+console.log('✅ Routes imported successfully');
 
 const app = express();
 
@@ -40,18 +50,27 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB connected successfully'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+// 🔍 DEBUG: Registering routes
+console.log('📋 Registering routes...');
+
 // Test routes
 app.get('/api/test', (req, res) => {
+  console.log('✅ /api/test route called');
   res.json({ message: 'Backend is working!' });
 });
 
 app.get('/api', (req, res) => {
+  console.log('✅ /api route called');
   res.json({ message: 'Recycling Management API is running' });
 });
 
 // Routes
+console.log('📋 Registering auth routes...');
 app.use('/api/auth', authRoutes);
+console.log('📋 Registering main routes...');
 app.use('/api', mainRoutes);
+
+console.log('✅ All routes registered successfully');
 
 // Error handler
 app.use((err, req, res, next) => {
