@@ -10,21 +10,44 @@ const mainRoutes = require('./routes/main');
 
 const app = express();
 
-// CORS configuration - allow your frontend URL
+// CORS configuration - FIXED for production
 app.use(cors({
   origin: [
+    'https://recycling-management-frontend-ow9o-m1zdjip0b-pam16.vercel.app',
     'https://recycling-management-frontend-ow9o-krs7ulr2c-pam16.vercel.app',
-    'http://localhost:3000' // For local development
+    'http://localhost:3000',
+    'http://localhost:5000'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json());
+
+// Debug middleware - log all requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log('Origin:', req.headers.origin);
+  next();
+});
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('MongoDB connected successfully'))
   .catch(err => console.error('MongoDB connection error:', err));
+
+// Test routes
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Backend is working!' });
+});
+
+app.get('/api', (req, res) => {
+  res.json({ message: 'Recycling Management API is running' });
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -32,19 +55,18 @@ app.use('/api', mainRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Error:', err.stack);
   res.status(500).json({ message: err.message });
 });
 
 // 404 handler
 app.use((req, res) => {
+  console.log(`404 - Route not found: ${req.method} ${req.url}`);
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Export for Vercel (serverless)
 module.exports = app;
 
-// For local development (only when running directly)
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
