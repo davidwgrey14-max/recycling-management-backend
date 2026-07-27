@@ -23,6 +23,7 @@ const app = express();
 // CORS configuration - FIXED for production
 app.use(cors({
   origin: [
+    'https://recycling-management-frontend-ow9o.vercel.app',  // ← Add this
     'https://recycling-management-frontend-ow9o-m1zdjip0b-pam16.vercel.app',
     'https://recycling-management-frontend-ow9o-krs7ulr2c-pam16.vercel.app',
     'http://localhost:3000',
