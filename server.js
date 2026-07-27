@@ -10,7 +10,15 @@ const mainRoutes = require('./routes/main');
 
 const app = express();
 
-app.use(cors());
+// CORS configuration - allow your frontend URL
+app.use(cors({
+  origin: [
+    'https://recycling-management-frontend-ow9o-krs7ulr2c-pam16.vercel.app',
+    'http://localhost:3000' // For local development
+  ],
+  credentials: true
+}));
+
 app.use(express.json());
 
 // MongoDB connection
@@ -33,7 +41,13 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log('Server running on http://localhost:' + PORT);
-});
+// Export for Vercel (serverless)
+module.exports = app;
+
+// For local development (only when running directly)
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log('Server running on http://localhost:' + PORT);
+  });
+}
