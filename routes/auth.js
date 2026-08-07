@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose'); // ✅ ADD THIS - it was missing!
 const User = require('../models/User');
 
 // Generate JWT Token
@@ -17,20 +18,28 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    console.log('Login attempt for:', email);
+    console.log('📝 Login attempt for:', email);
+    console.log('📊 Database connection state:', mongoose.connection.readyState);
     
-    // Find user by email OR phone
-    let user = await User.findOne({ email });
+    // ✅ Check if database is connected
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⚠️ Database not connected, attempting to reconnect...');
+      await mongoose.connect(process.env.MONGODB_URI);
+      console.log('✅ Database reconnected');
+    }
+    
+    // Find user by email OR phone with timeout
+    let user = await User.findOne({ email }).maxTimeMS(10000);
     if (!user) {
-      user = await User.findOne({ phone: email });
+      user = await User.findOne({ phone: email }).maxTimeMS(10000);
     }
     
     if (!user) {
-      console.log('User not found:', email);
+      console.log('❌ User not found:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    console.log('User found:', { id: user._id, role: user.role, email: user.email });
+    console.log('✅ User found:', { id: user._id, role: user.role, email: user.email });
 
     if (!user.isActive) {
       return res.status(401).json({ message: 'Account is deactivated' });
@@ -38,12 +47,12 @@ router.post('/login', async (req, res) => {
 
     const isPasswordMatch = await user.comparePassword(password);
     if (!isPasswordMatch) {
-      console.log('Password mismatch for:', email);
+      console.log('❌ Password mismatch for:', email);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const token = generateToken(user._id, user.role, user.shopId);
-    console.log('Token generated for role:', user.role);
+    console.log('✅ Token generated for role:', user.role);
 
     res.json({
       success: true,
@@ -62,8 +71,13 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('❌ Login error:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -71,6 +85,12 @@ router.post('/login', async (req, res) => {
 router.post('/setup-admin', async (req, res) => {
   try {
     const bcrypt = require('bcryptjs');
+    
+    // ✅ Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      await mongoose.connect(process.env.MONGODB_URI);
+    }
+    
     const existingAdmin = await User.findOne({ role: 'admin' });
     
     if (existingAdmin) {
@@ -94,7 +114,7 @@ router.post('/setup-admin', async (req, res) => {
       isActive: true
     });
     
-    console.log('Admin created:', { id: admin._id, email: admin.email, role: admin.role });
+    console.log('✅ Admin created:', { id: admin._id, email: admin.email, role: admin.role });
     
     res.json({ 
       message: 'Test admin created successfully', 
@@ -106,7 +126,7 @@ router.post('/setup-admin', async (req, res) => {
       } 
     });
   } catch (error) {
-    console.error('Setup admin error:', error);
+    console.error('❌ Setup admin error:', error);
     res.status(500).json({ error: error.message });
   }
 });

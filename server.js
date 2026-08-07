@@ -63,29 +63,90 @@ app.use((req, res, next) => {
   next();
 });
 
-// MongoDB connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB connected successfully'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
+// ✅ IMPROVED MongoDB connection with retry logic
+const connectDB = async (retries = 5) => {
+  try {
+    console.log('🔄 Connecting to MongoDB...');
+    console.log('MongoDB URI:', process.env.MONGODB_URI ? '✅ Present' : '❌ Missing');
+    
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      retryWrites: true,
+      retryReads: true,
+      heartbeatFrequencyMS: 10000,
+      family: 4,
+    });
+    
+    console.log(`✅ MongoDB connected successfully to: ${conn.connection.host}`);
+    return conn;
+  } catch (error) {
+    console.error(`❌ MongoDB connection error: ${error.message}`);
+    
+    if (retries > 0) {
+      console.log(`⏳ Retrying connection... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return connectDB(retries - 1);
+    }
+    
+    console.error('❌ Failed to connect to MongoDB after multiple attempts');
+    throw error;
+  }
+};
+
+// Start connection
+connectDB().catch(err => {
+  console.error('❌ Initial database connection failed:', err.message);
+});
+
+// ✅ Database health check middleware
+const checkDB = async (req, res, next) => {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⚠️ Database not connected, attempting to reconnect...');
+      await mongoose.connect(process.env.MONGODB_URI);
+      console.log('✅ Database reconnected');
+    }
+    next();
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+    res.status(503).json({
+      success: false,
+      message: 'Database service unavailable. Please try again later.',
+      error: error.message
+    });
+  }
+};
 
 // Test route
 app.get('/api/test', (req, res) => {
-  res.json({ message: 'Backend is working!', timestamp: new Date().toISOString() });
+  res.json({ 
+    message: 'Backend is working!', 
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    readyState: mongoose.connection.readyState
+  });
 });
 
 app.get('/api', (req, res) => {
-  res.json({ message: 'Recycling Management API is running' });
+  res.json({ 
+    message: 'Recycling Management API is running',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
 });
 
 // Import routes
 const authRoutes = require('./routes/auth');
 const mainRoutes = require('./routes/main');
 
-app.use('/api/auth', authRoutes);
-app.use('/api', mainRoutes);
+// ✅ Apply database check middleware to all routes
+app.use('/api/auth', checkDB, authRoutes);
+app.use('/api', checkDB, mainRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
