@@ -1,39 +1,172 @@
-﻿const express = require('express');
+﻿// server.js - Complete rewrite for Vercel
+const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
+const app = express();
+
+// ✅ CRITICAL: CORS configuration - MUST come first
+const allowedOrigins = [
+  'https://recycling-management-frontend-ow9o.vercel.app',
+  'https://recycling-management-frontend-ow9o.vercel.app/',
+  'http://localhost:3000',
+  'http://localhost:5000'
+];
+
+// Handle OPTIONS preflight requests
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin) || origin?.includes('vercel.app')) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', 'https://recycling-management-frontend-ow9o.vercel.app');
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Max-Age', '86400');
+  
+  if (req.method === 'OPTIONS') {
+    console.log('✅ OPTIONS request handled for:', req.url);
+    return res.status(200).send();
+  }
+  next();
+});
+
+// CORS middleware
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+      callback(null, true);
+    } else {
+      console.log('❌ Blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+app.use(express.json());
+
+// Debug middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log('Origin:', req.headers.origin);
+  next();
+});
+
+// ✅ IMPROVED MongoDB connection with retry logic
+const connectDB = async (retries = 5) => {
+  try {
+    console.log('🔄 Connecting to MongoDB...');
+    console.log('MongoDB URI:', process.env.MONGODB_URI ? '✅ Present' : '❌ Missing');
+    
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      retryWrites: true,
+      retryReads: true,
+      heartbeatFrequencyMS: 10000,
+      family: 4,
+    });
+    
+    console.log(`✅ MongoDB connected successfully to: ${conn.connection.host}`);
+    return conn;
+  } catch (error) {
+    console.error(`❌ MongoDB connection error: ${error.message}`);
+    
+    if (retries > 0) {
+      console.log(`⏳ Retrying connection... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return connectDB(retries - 1);
+    }
+    
+    console.error('❌ Failed to connect to MongoDB after multiple attempts');
+    throw error;
+  }
+};
+
+// Start connection
+connectDB().catch(err => {
+  console.error('❌ Initial database connection failed:', err.message);
+});
+
+// ✅ Database health check middleware
+const checkDB = async (req, res, next) => {
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⚠️ Database not connected, attempting to reconnect...');
+      await mongoose.connect(process.env.MONGODB_URI);
+      console.log('✅ Database reconnected');
+    }
+    next();
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+    res.status(503).json({
+      success: false,
+      message: 'Database service unavailable. Please try again later.',
+      error: error.message
+    });
+  }
+};
+
+// Test route
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'Backend is working!', 
+    timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    readyState: mongoose.connection.readyState
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.json({ 
+    message: 'Recycling Management API is running',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+// Import routes
 const authRoutes = require('./routes/auth');
 const mainRoutes = require('./routes/main');
 
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
-// MongoDB connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch(err => console.error('MongoDB connection error:', err));
-
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api', mainRoutes);
+// ✅ Apply database check middleware to all routes
+app.use('/api/auth', checkDB, authRoutes);
+app.use('/api', checkDB, mainRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: err.message });
+  console.error('❌ Error:', err.stack);
+  res.status(500).json({ message: err.message || 'Internal server error' });
 });
 
 // 404 handler
 app.use((req, res) => {
+  console.log(`❌ 404 - ${req.method} ${req.url}`);
   res.status(404).json({ message: 'Route not found' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log('Server running on http://localhost:' + PORT);
-});
+// Export for Vercel
+module.exports = app;
+
+// Only listen if running directly (not on Vercel)
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
